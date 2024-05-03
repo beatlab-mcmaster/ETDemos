@@ -1,4 +1,5 @@
 import cv2
+import os, sys
 from concurrent.futures import ProcessPoolExecutor
 from pupil_labs.realtime_api.simple import discover_devices, Device
 from pl_blinks.blink_detector.blink_detector import blink_detection_pipeline
@@ -10,7 +11,7 @@ from pl_blinks.blink_detector.helper import (
 )
 import seaborn as sns
 import numpy as np
-import winsound
+import platform
 
 def device_properties(device: Device):
     return f"""Device {device.phone_name} 
@@ -22,63 +23,9 @@ def device_properties(device: Device):
     glasses sno. : {device.serial_number_glasses}
     scenecam sno.: {device.serial_number_scene_cam}"""
 
-## Pupil Labs' DNS search is not always reliable 
-# def find_devices(device_names, timeout=5):
-# 	print(f"Searching for devices {device_names} on the network")
-# 	while True:
-# 		devices_found = discover_devices(timeout)
-# 		devices_found_names, devices_found_ips = [], []
-# 		for device in devices_found:
-# 			print(device_properties(device))
-# 			devices_found_names.append(device.phone_name) 
-# 			if device.phone_name in device_names:
-# 				devices_found_ips.append(device.phone_ip)
-# 			device.close()
-# 		if (set(device_names) != set(devices_found_names)):
-# 			print(f"Missing devices: {set(device_names) - set(devices_found_names)}")
-# 			res = input("Search again? (y/n)")
-# 			if res in ["N", "n"]:
-# 				break
-# 		else:
-# 			break
-# 	return devices_found_ips
 
-
-def stream_from_device(args):
+def detect_blinks(args):
 	device = Device(args["device_ip"], 8080)
-	print("starting stream for device: ", device_properties(device))
-	device_name = device.phone_name
-	# print("starting stream for device ", device_name)
-	radius = args["radius"]
-	color = args["color"]
-	thickness = args["thickness"]
-
-	while True:
-		try:
-			scene_sample, gaze_sample = device.receive_matched_scene_video_frame_and_gaze()
-			# dt_gaze = datetime.fromtimestamp(gaze_sample.timestamp_unix_seconds)
-			# dt_scene = datetime.fromtimestamp(scene_sample.timestamp_unix_seconds)
-			center_coordinates = (round(gaze_sample.x), round(gaze_sample.y))
-			img_with_gaze = cv2.circle(scene_sample.bgr_pixels, center_coordinates, radius, color, thickness)
-			img_with_gaze = cv2.circle(img_with_gaze, center_coordinates, int(radius*0.75), (255, 255, 255), int(thickness*0.5))
-			img_with_gaze = cv2.circle(img_with_gaze, center_coordinates, int(radius*0.50), (0, 0, 0), int(thickness*0.5))
-			img_with_gaze = cv2.circle(img_with_gaze, center_coordinates, int(radius*0.25), (255, 255, 255), int(thickness*0.5))
-			img_with_gaze = cv2.circle(scene_sample.bgr_pixels, center_coordinates, int(radius*0.15), color, int(thickness*0.25))
-
-			resized = cv2.resize(img_with_gaze, args["window_resolution"])
-			cv2.imshow(device_name, resized)
-			if cv2.waitKey(1) == ord('q'):
-				device.close()
-				break
-		except Exception as e:
-			print(device_name, 'close... error:', e)
-			device.close()
-		except KeyboardInterrupt:
-			device.close()
-
-
-def detect_blinks(device_ip):
-	device = Device(device_ip, 8080)
 	device_name = device.phone_name
 	print("starting stream for device: ", device_properties(device))
 	left_images, right_images, timestamps = stream_images_and_timestamps(device)
@@ -106,9 +53,19 @@ def detect_blinks(device_ip):
 		    #     blink_rate_last_30s, blink_counter_last_30s / min(30, blink_times[0])
 		    # )
 		    # plot_blink_rate(blink_times, avg_blink_rate, blink_rate_last_30s)
-		    # print("blink detected for device ", device.phone_name)
-		    winsound.PlaySound("SystemExit", winsound.SND_ALIAS) #'SystemExit','SystemExclamation', 'SystemAsterisk', 'SystemHand', 'SystemQuestion'
-		    winsound.Beep(17000, 300)
+		    print("blink detected for device ", device.phone_name)
+		    if platform.system() == "Windows":
+		        import winsound
+		        freq = 1000*int(args["device_ip"].strip(".")[-1][-1])
+		        # winsound.PlaySound("SystemExit", winsound.SND_ALIAS) #'SystemExit','SystemExclamation', 'SystemAsterisk', 'SystemHand', 'SystemQuestion'
+		        winsound.Beep(freq, 1000)
+		        print("Sound frequency:", freq)
+		    elif platform.system() == "Darwin":
+		        # sys.stdout.write('\a')
+		        os.system(f"say \"{args['say']}\"")
+		    else:
+		        print("Unsupported platform.")	    	
+		    	
 		except Exception as e:
 			print(device_name, 'error:', e)
 			device.close()
@@ -122,24 +79,24 @@ if __name__ == '__main__':
 	
 	device_ids = input("Input device ids/numbers (as list of ints)")
 	assert type(eval(device_ids))==list, "Incorrect input provided"
+	if len(eval(device_ids)) > 2:
+		raise Exception("More than two devices provided. Exiting...")
+	else:
+		print("Using subnet 192.168.25.1xx.")
 
-	palette = sns.color_palette("colorblind", len(device_ids))
+	palette = ["ey", "oo"]
 	args = []
 	for i,id_ in enumerate(eval(device_ids)):
 		args.append({"device_ip": "192.168.25.{:d}".format(id_+100),
-			"color": palette[i],
-			# Scene video presentation size
-			"window_resolution": [640,480],
-			# Gaze circle parameters
-			"radius": 30,
-			"thickness": 20
+			"say": palette[i]
 		})
 
 	try:
 		# Start streaming from each device on a separate process
 		with ProcessPoolExecutor() as executor:
-			futures = executor.map(detect_blinks, [arg["device_ip"] for arg in args])
+			futures = executor.map(detect_blinks, args)
 
 	except KeyboardInterrupt:
 		print("KeyboardInterrupt: Exiting gracefully...")
+		sys.exit()
 
