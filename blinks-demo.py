@@ -84,7 +84,7 @@ if __name__ == '__main__':
 	else:
 		print("Using subnet 192.168.25.1xx.")
 
-	palette = ["ey", "oo"]
+	palette = ["ey", "o"]
 	args = []
 	for i,id_ in enumerate(eval(device_ids)):
 		args.append({"device_ip": "192.168.25.{:d}".format(id_+100),

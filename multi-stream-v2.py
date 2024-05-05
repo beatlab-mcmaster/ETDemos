@@ -69,15 +69,12 @@ def stream_from_device(args):
 
             if cv2.waitKey(1) == ord('q'):
                 device.close()
-                cv2.destroyWindow(device_name)
                 break
         except Exception as e:
             print(device_name, 'close... error:', e)
             device.close()
-            cv2.destroyWindow(device_name)
         except KeyboardInterrupt:
             device.close()
-            cv2.destroyWindow(device_name)
 
 if __name__ == '__main__':
     
@@ -97,10 +94,7 @@ if __name__ == '__main__':
         })
 
     # Start streaming from each device on a separate process
-    try:
-        with ProcessPoolExecutor() as executor:
-            futures = executor.map(stream_from_device, args)
-    except KeyboardInterrupt:
-        cv2.destroyAllWindows()
+    with ProcessPoolExecutor() as executor:
+        futures = executor.map(stream_from_device, args)
    
     cv2.destroyAllWindows()
