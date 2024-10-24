@@ -1,8 +1,8 @@
 import cv2
+import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 from pupil_labs.realtime_api.simple import discover_devices, Device
 import seaborn as sns
-import numpy as np
 
 def device_properties(device: Device):
     return f"""Device {device.phone_name} 
@@ -47,20 +47,26 @@ def stream_from_device(args):
 
     while True:
         try:
-            scene_sample, eyes_sample, gaze_sample = device.receive_matched_scene_and_eyes_video_frames_and_gaze()
+            matched = device.receive_matched_scene_and_eyes_video_frames_and_gaze()
+
+            #check if match is found
+            if not matched:
+                print("Frame not found")
+                continue
+
             eye_size = [args["window_resolution"][0] / 3, 0]
-            eyes = cv2.resize(eyes_sample.bgr_pixels,
+            eyes = cv2.resize(matched.eyes.bgr_pixels,
                               [args["window_resolution"][0],
                                args["window_resolution"][1] // 2])
 
             # dt_gaze = datetime.fromtimestamp(gaze_sample.timestamp_unix_seconds)
             # dt_scene = datetime.fromtimestamp(scene_sample.timestamp_unix_seconds)
-            center_coordinates = (round(gaze_sample.x), round(gaze_sample.y))
-            img_with_gaze = cv2.circle(scene_sample.bgr_pixels, center_coordinates, radius, color, thickness)
+            center_coordinates = (round(matched.gaze.x), round(matched.gaze.y))
+            img_with_gaze = cv2.circle(matched.scene.bgr_pixels, center_coordinates, radius, color, thickness)
             img_with_gaze = cv2.circle(img_with_gaze, center_coordinates, int(radius*0.75), (255, 255, 255), int(thickness*0.5))
             img_with_gaze = cv2.circle(img_with_gaze, center_coordinates, int(radius*0.50), (0, 0, 0), int(thickness*0.5))
             img_with_gaze = cv2.circle(img_with_gaze, center_coordinates, int(radius*0.25), (255, 255, 255), int(thickness*0.5))
-            img_with_gaze = cv2.circle(scene_sample.bgr_pixels, center_coordinates, int(radius*0.15), color, int(thickness*0.25))
+            img_with_gaze = cv2.circle(matched.scene.bgr_pixels, center_coordinates, int(radius*0.15), color, int(thickness*0.25))
 
             resized = cv2.resize(img_with_gaze, args["window_resolution"])
 
@@ -78,13 +84,17 @@ def stream_from_device(args):
 
 if __name__ == '__main__':
     
-    device_ids = input("Input device ids/numbers (as list of ints)")
+    default_network_id = "192.168.50"
+    network_id = input(f"Input network id or press Enter to use default ({default_network_id}) \n")
+    network_id = default_network_id if not network_id.strip() else network_id
+
+    device_ids = input("Input device ids/numbers as a list (ints enclosed in '[]' separated by ',')\n")
     assert type(eval(device_ids))==list, "Incorrect input provided"
 
     palette = sns.color_palette("colorblind", len(device_ids))
     args = []
     for i,id_ in enumerate(eval(device_ids)):
-        args.append({"device_ip": "192.168.25.{:d}".format(id_+100),
+        args.append({"device_ip": f"{network_id}.{id_+100}",
             "color": palette[i],
             # Scene video presentation size
             "window_resolution": [640,480],

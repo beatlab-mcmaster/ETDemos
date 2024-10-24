@@ -1,2 +1,3 @@
 pupil-labs-realtime-api
 opencv-python
+seaborn
