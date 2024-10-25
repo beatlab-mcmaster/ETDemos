@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 import time
 
 ## find cameras
@@ -33,6 +34,9 @@ detector = cv2.aruco.ArucoDetector(arucoDict, arucoParams)
 time.sleep(2)
 
 
+width, height = 800, 600
+pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
+
 while cap.isOpened():
     ret, frame = cap.read()
 
@@ -42,10 +46,15 @@ while cap.isOpened():
     
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     corners, ids, rejected = detector.detectMarkers(gray)
-    print("Detected markers:", ids)
-    if ids is not None:
+    if np.ravel(ids).shape[0] == 4:
+        print("Corners", corners)
+        pts1 = np.mean(np.stack([corners[0], corners[1], corners[2], corners[3]], axis=0), axis = 2).squeeze()
+        matrix = cv2.getPerspectiveTransform(pts1, pts2)
+        warped_frame = cv2.warpPerspective(frame, matrix, (width, height))
+        cv2.imshow('transform', warped_frame)
+
         cv2.aruco.drawDetectedMarkers(gray, corners, ids)
-    
+        
     cv2.imshow("frame", gray)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
